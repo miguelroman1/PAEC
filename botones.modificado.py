@@ -1,29 +1,165 @@
 import flet as ft
+import matplotlib
+matplotlib.use('Agg')  # Usar backend no interactivo
+import matplotlib.pyplot as plt
+import numpy as np
+import tempfile
+import os
+import re
 
 def main(page: ft.Page):
 
     page.title = "Sistema Escolar"
-    page.window_width = 900
-    page.window_height = 700
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.scroll = ft.ScrollMode.AUTO
+    page.window_width = 1000
+    page.window_height = 800
+    page.horizontal_alignment = "center"
+    page.scroll = "auto"
+
+    def crear_grafica(funcion_str, limite_inf, limite_sup, resultado):
+        """Crea una gráfica de la función y el área bajo la curva"""
+        try:
+            # Preparar la función para evaluación
+            funcion_eval = funcion_str.replace('^', '**')
+            
+            # Crear rango de x
+            x = np.linspace(limite_inf - 1, limite_sup + 1, 1000)
+            
+            # Evaluar la función
+            def f(x_val):
+                return eval(funcion_eval, {"x": x_val, "np": np, "sin": np.sin, "cos": np.cos, 
+                                         "exp": np.exp, "log": np.log, "sqrt": np.sqrt,
+                                         "__builtins__": {}}, {})
+            
+            y = []
+            for xi in x:
+                try:
+                    yi = f(xi)
+                    # Manejar valores infinitos o demasiado grandes
+                    if np.isinf(yi) or np.isnan(yi) or abs(yi) > 1e6:
+                        yi = 0
+                    y.append(yi)
+                except:
+                    y.append(0)
+            
+            y = np.array(y)
+            
+            # Crear figura con estilo mejorado
+            fig, ax = plt.subplots(figsize=(10, 6))
+            fig.patch.set_facecolor('#f5f5f5')
+            ax.set_facecolor('#ffffff')
+            
+            # Graficar la función
+            ax.plot(x, y, 'b-', linewidth=2.5, label=f'f(x) = {funcion_str}', zorder=3)
+            
+            # Rellenar el área bajo la curva solo si no hay valores extremos
+            try:
+                x_fill = np.linspace(limite_inf, limite_sup, 500)
+                y_fill = []
+                for xi in x_fill:
+                    try:
+                        yi = f(xi)
+                        if np.isinf(yi) or np.isnan(yi) or abs(yi) > 1e6:
+                            yi = 0
+                        y_fill.append(yi)
+                    except:
+                        y_fill.append(0)
+                y_fill = np.array(y_fill)
+                
+                # Solo rellenar si los valores son razonables
+                if np.max(np.abs(y_fill)) < 1e6:
+                    ax.fill_between(x_fill, 0, y_fill, alpha=0.3, color='green', 
+                                   label=f'Área = {resultado:.4f}', zorder=2)
+            except:
+                pass
+            
+            # Resaltar los límites
+            ax.axvline(x=limite_inf, color='red', linestyle='--', alpha=0.7, 
+                      linewidth=2, label=f'Límite inferior: {limite_inf}')
+            ax.axvline(x=limite_sup, color='orange', linestyle='--', alpha=0.7, 
+                      linewidth=2, label=f'Límite superior: {limite_sup}')
+            
+            # Configurar gráfica
+            ax.grid(True, alpha=0.3, linestyle='--')
+            ax.set_xlabel('x', fontsize=12, fontweight='bold')
+            ax.set_ylabel('f(x)', fontsize=12, fontweight='bold')
+            ax.set_title(f'Área bajo la curva f(x) = {funcion_str}', fontsize=14, fontweight='bold', pad=20)
+            ax.legend(loc='upper right', framealpha=0.9)
+            ax.axhline(y=0, color='black', linestyle='-', linewidth=0.8, zorder=1)
+            ax.axvline(x=0, color='black', linestyle='-', linewidth=0.8, zorder=1)
+            
+            # Ajustar límites de y para mejor visualización
+            y_finite = y[np.isfinite(y)]
+            if len(y_finite) > 0:
+                y_min = min(np.min(y_finite), 0) - 1
+                y_max = np.max(y_finite) + 1
+                # Limitar el rango si es muy grande
+                if y_max - y_min > 100:
+                    y_max = min(y_max, 50)
+                    y_min = max(y_min, -50)
+                ax.set_ylim(y_min, y_max)
+            
+            plt.tight_layout()
+            
+            # Guardar imagen en archivo temporal
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            plt.savefig(temp_file.name, format='png', dpi=100, bbox_inches='tight', facecolor='#f5f5f5')
+            temp_file.close()
+            plt.close(fig)
+            
+            # Crear imagen desde archivo
+            imagen = ft.Image(src=temp_file.name, width=800, height=500)
+            
+            # Programar eliminación del archivo temporal después de un tiempo
+            import threading
+            def eliminar_temp():
+                try:
+                    if os.path.exists(temp_file.name):
+                        os.unlink(temp_file.name)
+                except:
+                    pass
+            
+            threading.Timer(5.0, eliminar_temp).start()
+            
+            return imagen
+        
+        except Exception as e:
+            print(f"Error en gráfica: {str(e)}")
+            return ft.Text(f"No se pudo generar la gráfica: {str(e)[:100]}", color="red", size=14)
 
     def mostrar_materia_ejemplo(nombre, descripcion):
         """Versión original para el ejemplo de matemáticas"""
         page.clean()
+        
+        # Extraer la función del ejemplo
+        funcion_ejemplo = "x^2 + 2"
+        limite_inf = 1
+        limite_sup = 3
+        resultado = 38/3  # 12.666...
+        
+        grafica = crear_grafica("x^2 + 2", limite_inf, limite_sup, resultado)
+        
         page.add(
             ft.Column(
                 [
-                    ft.Text(nombre, size=30, weight="bold", text_align=ft.TextAlign.CENTER),
-                    ft.Text(descripcion, size=18, text_align=ft.TextAlign.CENTER),
+                    ft.Text(nombre, size=30, weight="bold", text_align="center"),
+                    ft.Text(descripcion, size=18, text_align="center"),
+                    
+                    ft.Divider(height=20),
+                    
+                    ft.Text("Gráfica del área bajo la curva:", size=20, weight="bold", text_align="center"),
+                    grafica,
+                    
+                    ft.Divider(height=20),
+                    
                     ft.ElevatedButton(
                         "Volver al menú",
-                        on_click=lambda e: menu_principal()
+                        on_click=lambda e: menu_principal(),
                     )
                 ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=20
+                alignment="center",
+                horizontal_alignment="center",
+                spacing=20,
+                scroll="auto"
             )
         )
 
@@ -67,38 +203,33 @@ def main(page: ft.Page):
                     content=ft.Column(
                         [
                             ft.Container(
-                                content=ft.Row(
-                                    [
-                                        ft.Text(
-                                            paso["numero"],
-                                            size=18,
-                                            weight="bold",
-                                            color=ft.Colors.WHITE
-                                        )
-                                    ],
-                                    alignment=ft.MainAxisAlignment.CENTER,
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER
+                                content=ft.Text(
+                                    paso["numero"],
+                                    size=18,
+                                    weight="bold",
+                                    color=ft.Colors.WHITE
                                 ),
                                 width=40,
                                 height=40,
                                 bgcolor=paso["color"],
                                 border_radius=20,
+                                alignment="center"
                             ),
 
                             ft.Text(
                                 paso["titulo"],
                                 size=20,
                                 weight="bold",
-                                text_align=ft.TextAlign.CENTER
+                                text_align="center"
                             ),
                             ft.Text(
                                 paso["descripcion"],
                                 size=16,
-                                text_align=ft.TextAlign.CENTER
+                                text_align="center"
                             ),
                         ],
                         spacing=10,
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                        horizontal_alignment="center"
                     ),
                     padding=20,
                     width=350,
@@ -108,8 +239,8 @@ def main(page: ft.Page):
             tarjetas.append(tarjeta)
         
         # Organizar tarjetas en filas (2 columnas)
-        fila1 = ft.Row(tarjetas[:2], alignment=ft.MainAxisAlignment.CENTER, spacing=30)
-        fila2 = ft.Row(tarjetas[2:], alignment=ft.MainAxisAlignment.CENTER, spacing=30)
+        fila1 = ft.Row(tarjetas[:2], alignment="center", spacing=30)
+        fila2 = ft.Row(tarjetas[2:], alignment="center", spacing=30)
         
         # Decoración de ondas
         ondas = ft.Container(
@@ -131,7 +262,7 @@ def main(page: ft.Page):
                         "Movimiento y estabilidad",
                         size=32,
                         weight="bold",
-                        text_align=ft.TextAlign.CENTER,
+                        text_align="center",
                         color=ft.Colors.INDIGO_700
                     ),
                     
@@ -139,7 +270,7 @@ def main(page: ft.Page):
                         "CANCELACIÓN ACTIVA DE RUIDO (ANC) EN AUDÍFONOS",
                         size=20,
                         weight="bold",
-                        text_align=ft.TextAlign.CENTER,
+                        text_align="center",
                         color=ft.Colors.INDIGO_500
                     ),
                     
@@ -151,7 +282,7 @@ def main(page: ft.Page):
                         "PROCESO EXPLICADO PASO A PASO:",
                         size=22,
                         weight="bold",
-                        text_align=ft.TextAlign.CENTER
+                        text_align="center"
                     ),
                     
                     fila1,
@@ -166,18 +297,18 @@ def main(page: ft.Page):
                                     "¿CÓMO FUNCIONA FÍSICAMENTE?",
                                     size=20,
                                     weight="bold",
-                                    text_align=ft.TextAlign.CENTER
+                                    text_align="center"
                                 ),
                                 ft.Text(
                                     "La cancelación activa de ruido se basa en el principio de SUPERPOSICIÓN DE ONDAS. "
                                     "Cuando dos ondas sonoras de igual amplitud pero fase opuesta se encuentran, "
                                     "se anulan mutuamente (interferencia destructiva), resultando en una reducción significativa del ruido percibido.",
                                     size=16,
-                                    text_align=ft.TextAlign.CENTER
+                                    text_align="center"
                                 ),
                             ],
                             spacing=10,
-                            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                            horizontal_alignment="center"
                         ),
                         padding=20,
                         bgcolor=ft.Colors.GREY_100,
@@ -188,16 +319,12 @@ def main(page: ft.Page):
                     ft.ElevatedButton(
                         "Volver al menú",
                         on_click=lambda e: menu_principal(),
-                        style=ft.ButtonStyle(
-                            padding=15,
-                            bgcolor=ft.Colors.INDIGO_500,
-                            color=ft.Colors.WHITE
-                        )
                     ),
                 ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=25
+                alignment="center",
+                horizontal_alignment="center",
+                spacing=25,
+                scroll="auto"
             )
         )
 
@@ -252,51 +379,45 @@ def main(page: ft.Page):
                     [
                         # Círculo con número (más pequeño)
                         ft.Container(
-                            content=ft.Row(
-                                [
-                                    ft.Text(
-                                        etapa["numero"],
-                                        size=16,
-                                        weight="bold",
-                                        color=ft.Colors.WHITE
-                                    )
-                                ],
-                                alignment=ft.MainAxisAlignment.CENTER,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER
+                            content=ft.Text(
+                                etapa["numero"],
+                                size=16,
+                                weight="bold",
+                                color=ft.Colors.WHITE
                             ),
                             width=40,
                             height=40,
                             bgcolor=etapa["color"],
                             border_radius=20,
+                            alignment="center"
                         ),
                         
                         # Contenido de la etapa
                         ft.Column(
                             [
-                                ft.Text(etapa["nombre"], size=22, weight="bold", color=etapa["color"], text_align=ft.TextAlign.CENTER),
-                                ft.Text(etapa["descripcion"], size=14, text_align=ft.TextAlign.CENTER),
+                                ft.Text(etapa["nombre"], size=22, weight="bold", color=etapa["color"], text_align="center"),
+                                ft.Text(etapa["descripcion"], size=14, text_align="center"),
                                 ft.Row(
                                     [
-                                        ft.Text(f"⏱️ {etapa['duracion']}", size=12, italic=True, text_align=ft.TextAlign.CENTER),
-                                        ft.Text(f"📍 {etapa['organo']}", size=12, italic=True, text_align=ft.TextAlign.CENTER),
+                                        ft.Text(f"⏱️ {etapa['duracion']}", size=12, italic=True),
+                                        ft.Text(f"📍 {etapa['organo']}", size=12, italic=True),
                                     ],
                                     spacing=20,
-                                    alignment=ft.MainAxisAlignment.CENTER
+                                    alignment="center"
                                 )
                             ],
                             spacing=8,
                             expand=True,
-                            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                            horizontal_alignment="center"
                         )
                     ],
                     spacing=20,
                     expand=True,
-                    alignment=ft.MainAxisAlignment.CENTER
+                    alignment="center"
                 ),
                 padding=15,
                 bgcolor=ft.Colors.WHITE,
                 border_radius=15,
-                shadow=ft.BoxShadow(spread_radius=1, blur_radius=5, color=ft.Colors.GREY_300),
             )
             
             elementos_timeline.append(tarjeta)
@@ -313,14 +434,14 @@ def main(page: ft.Page):
         resumen = ft.Container(
             content=ft.Column(
                 [
-                    ft.Text("DATOS INTERESANTES:", size=20, weight="bold", text_align=ft.TextAlign.CENTER),
-                    ft.Text("• El intestino delgado mide aproximadamente 6-7 metros", size=14, text_align=ft.TextAlign.CENTER),
-                    ft.Text("• El estómago puede expandirse hasta 1.5 litros", size=14, text_align=ft.TextAlign.CENTER),
-                    ft.Text("• La digestión total puede tomar entre 24 y 72 horas", size=14, text_align=ft.TextAlign.CENTER),
-                    ft.Text("• Las vellosidades intestinales aumentan 10 veces la superficie de absorción", size=14, text_align=ft.TextAlign.CENTER),
+                    ft.Text("DATOS INTERESANTES:", size=20, weight="bold", text_align="center"),
+                    ft.Text("• El intestino delgado mide aproximadamente 6-7 metros", size=14, text_align="center"),
+                    ft.Text("• El estómago puede expandirse hasta 1.5 litros", size=14, text_align="center"),
+                    ft.Text("• La digestión total puede tomar entre 24 y 72 horas", size=14, text_align="center"),
+                    ft.Text("• Las vellosidades intestinales aumentan 10 veces la superficie de absorción", size=14, text_align="center"),
                 ],
                 spacing=8,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                horizontal_alignment="center"
             ),
             padding=20,
             bgcolor=ft.Colors.GREEN_50,
@@ -335,7 +456,7 @@ def main(page: ft.Page):
                         "Organismos, Estructuras y Procesos",
                         size=32,
                         weight="bold",
-                        text_align=ft.TextAlign.CENTER,
+                        text_align="center",
                         color=ft.Colors.GREEN_700
                     ),
                     
@@ -343,7 +464,7 @@ def main(page: ft.Page):
                         "EL PROCESO DE ALIMENTACIÓN Y NUTRICIÓN",
                         size=20,
                         weight="bold",
-                        text_align=ft.TextAlign.CENTER,
+                        text_align="center",
                         color=ft.Colors.GREEN_600
                     ),
                     
@@ -353,10 +474,10 @@ def main(page: ft.Page):
                         "TIMELINE DEL PROCESO DIGESTIVO:",
                         size=22,
                         weight="bold",
-                        text_align=ft.TextAlign.CENTER
+                        text_align="center"
                     ),
                     
-                    ft.Column(elementos_timeline, spacing=5, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    ft.Column(elementos_timeline, spacing=5, horizontal_alignment="center"),
                     
                     ft.Divider(height=20),
                     
@@ -365,17 +486,12 @@ def main(page: ft.Page):
                     ft.ElevatedButton(
                         "Volver al menú",
                         on_click=lambda e: menu_principal(),
-                        style=ft.ButtonStyle(
-                            padding=15,
-                            bgcolor=ft.Colors.GREEN_600,
-                            color=ft.Colors.WHITE
-                        )
                     ),
                 ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment="center",
+                horizontal_alignment="center",
                 spacing=25,
-                scroll=ft.ScrollMode.AUTO
+                scroll="auto"
             )
         )
 
@@ -386,8 +502,8 @@ def main(page: ft.Page):
         page.add(
             ft.Column(
                 [
-                    ft.Text("Temas selectos de Matemáticas", size=30, weight="bold", text_align=ft.TextAlign.CENTER),
-                    ft.Text("¿Cómo deseas calcular el área bajo la curva?", size=18, text_align=ft.TextAlign.CENTER),
+                    ft.Text("Temas selectos de Matemáticas", size=30, weight="bold", text_align="center"),
+                    ft.Text("¿Cómo deseas calcular el área bajo la curva?", size=18, text_align="center"),
                     
                     ft.ElevatedButton(
                         "Ver ejemplo (Integral definida: x² + 2 desde 1 a 3)",
@@ -404,7 +520,7 @@ def main(page: ft.Page):
                         width=400,
                     ),
                     
-                    ft.Text("O", size=16, weight="bold", text_align=ft.TextAlign.CENTER),
+                    ft.Text("O", size=16, weight="bold", text_align="center"),
                     
                     ft.ElevatedButton(
                         "Ingresar mis propios datos",
@@ -418,8 +534,8 @@ def main(page: ft.Page):
                         width=200,
                     ),
                 ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment="center",
+                horizontal_alignment="center",
                 spacing=20
             )
         )
@@ -428,9 +544,14 @@ def main(page: ft.Page):
         """Muestra formulario para que el usuario ingrese su propia función y límites"""
         page.clean()
         
-        campo_funcion = ft.TextField(label="Función f(x)", hint_text="Ejemplo: x**2+2, x^2+2, 2*x+1", width=400, text_align=ft.TextAlign.CENTER)
-        campo_limite_inferior = ft.TextField(label="Límite inferior", hint_text="Ejemplo: 1", width=200, text_align=ft.TextAlign.CENTER)
-        campo_limite_superior = ft.TextField(label="Límite superior", hint_text="Ejemplo: 3", width=200, text_align=ft.TextAlign.CENTER)
+        campo_funcion = ft.TextField(
+            label="Función f(x)", 
+            hint_text="Ejemplo: x**2+2, x^2+2, 2*x+1, sin(x), exp(x)", 
+            width=400, 
+            text_align="center"
+        )
+        campo_limite_inferior = ft.TextField(label="Límite inferior", hint_text="Ejemplo: 1", width=200, text_align="center")
+        campo_limite_superior = ft.TextField(label="Límite superior", hint_text="Ejemplo: 3", width=200, text_align="center")
         
         def calcular_con_datos_usuario(e):
             try:
@@ -460,18 +581,18 @@ def main(page: ft.Page):
         page.add(
             ft.Column(
                 [
-                    ft.Text("Ingresa tu propia función", size=30, weight="bold", text_align=ft.TextAlign.CENTER),
-                    ft.Text("Ingresa una función polinómica en términos de x", size=16, text_align=ft.TextAlign.CENTER),
+                    ft.Text("Ingresa tu propia función", size=30, weight="bold", text_align="center"),
+                    ft.Text("Ingresa una función en términos de x (ejemplos: x**2, sin(x), exp(x), log(x))", size=14, text_align="center"),
                     campo_funcion,
                     ft.Row(
                         [campo_limite_inferior, campo_limite_superior],
-                        alignment=ft.MainAxisAlignment.CENTER,
+                        alignment="center",
                         spacing=20
                     ),
                     ft.ElevatedButton(
-                        "Calcular integral",
+                        "Calcular integral y graficar",
                         on_click=calcular_con_datos_usuario,
-                        width=200,
+                        width=250,
                     ),
                     ft.ElevatedButton(
                         "Volver",
@@ -479,84 +600,55 @@ def main(page: ft.Page):
                         width=200,
                     ),
                 ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment="center",
+                horizontal_alignment="center",
                 spacing=20
             )
         )
 
     def calcular_integral(e, funcion_str, limite_inf, limite_sup):
-        """Calcula la integral definida de una función polinómica simple."""
+        """Calcula la integral definida de una función usando integración numérica."""
         try:
+            funcion_str_original = funcion_str
             funcion_str = funcion_str.replace('^', '**')
-            import re
             
-            def integrar_termino(termino):
-                termino = termino.strip()
-                if termino == '':
-                    return ''
-                
-                if 'x' in termino:
-                    match = re.match(r'([+-]?\d*\.?\d*)\*?x(?:\*\*(\d+))?', termino)
-                    if match:
-                        coef = match.group(1)
-                        exp = match.group(2)
-                        
-                        if coef == '' or coef == '+':
-                            coef = 1
-                        elif coef == '-':
-                            coef = -1
-                        else:
-                            coef = float(coef)
-                        
-                        if exp is None:
-                            exp = 1
-                        else:
-                            exp = int(exp)
-                        
-                        nuevo_coef = coef / (exp + 1)
-                        nuevo_exp = exp + 1
-                        
-                        if nuevo_coef == 1:
-                            return f"x**{nuevo_exp}"
-                        elif nuevo_coef == -1:
-                            return f"-x**{nuevo_exp}"
-                        else:
-                            return f"{nuevo_coef}*x**{nuevo_exp}"
-                else:
-                    coef = float(termino) if termino else 0
-                    if coef == 1:
-                        return "x"
-                    elif coef == -1:
-                        return "-x"
+            # Método de integración numérica (Simpson)
+            def f(x_val):
+                return eval(funcion_str, {"x": x_val, "np": np, "sin": np.sin, "cos": np.cos, 
+                                         "exp": np.exp, "log": np.log, "sqrt": np.sqrt,
+                                         "__builtins__": {}}, {})
+            
+            # Verificar que la función es evaluable en los límites
+            f(limite_inf)
+            f(limite_sup)
+            
+            # Integración numérica usando Simpson
+            n = 1000  # número de subdivisiones
+            h = (limite_sup - limite_inf) / n
+            resultado = f(limite_inf) + f(limite_sup)
+            
+            for i in range(1, n):
+                x_val = limite_inf + i * h
+                try:
+                    fx = f(x_val)
+                    if np.isinf(fx) or np.isnan(fx):
+                        fx = 0
+                    if i % 2 == 0:
+                        resultado += 2 * fx
                     else:
-                        return f"{coef}*x"
-                return termino
+                        resultado += 4 * fx
+                except:
+                    pass
             
-            terminos = re.findall(r'([+-]?[^+-]+)', funcion_str)
-            antiderivada_str = ''
-            for term in terminos:
-                term_integrado = integrar_termino(term)
-                if term_integrado:
-                    antiderivada_str += '+' + term_integrado
+            resultado *= h / 3
             
-            antiderivada_str = antiderivada_str.lstrip('+')
-            
-            def evaluar_antiderivada(x_val):
-                return eval(antiderivada_str, {"x": x_val, "__builtins__": {}}, {})
-            
-            valor_superior = evaluar_antiderivada(limite_sup)
-            valor_inferior = evaluar_antiderivada(limite_inf)
-            resultado = valor_superior - valor_inferior
-            
+            # Mostrar resultado con gráfica
             mostrar_resultado_matematicas(
-                funcion_str.replace('**', '^'),
+                funcion_str_original,
                 limite_inf,
                 limite_sup,
-                antiderivada_str.replace('**', '^'),
-                valor_superior,
-                valor_inferior,
-                resultado
+                resultado=resultado,
+                funcion_eval=funcion_str
             )
             
         except Exception as err:
@@ -564,48 +656,58 @@ def main(page: ft.Page):
                 funcion_str,
                 limite_inf,
                 limite_sup,
-                error=f"Error al calcular: {str(err)}\nAsegúrate de usar formato como: x**2, 2*x, x**2+3*x+1"
+                error=f"Error al calcular: {str(err)}\nAsegúrate de usar formato válido como: x**2, sin(x), exp(x), 2*x+1"
             )
 
-    def mostrar_resultado_matematicas(funcion, lim_inf, lim_sup, antiderivada=None, val_sup=None, val_inf=None, resultado=None, error=None):
+    def mostrar_resultado_matematicas(funcion, lim_inf, lim_sup, resultado=None, error=None, funcion_eval=None):
         page.clean()
         
         contenido = [
-            ft.Text("Temas selectos de Matemáticas", size=30, weight="bold", text_align=ft.TextAlign.CENTER),
-            ft.Text(f"Función: f(x) = {funcion}", size=18, text_align=ft.TextAlign.CENTER),
-            ft.Text(f"Límite inferior: {lim_inf}", size=16, text_align=ft.TextAlign.CENTER),
-            ft.Text(f"Límite superior: {lim_sup}", size=16, text_align=ft.TextAlign.CENTER),
+            ft.Text("Temas selectos de Matemáticas", size=30, weight="bold", text_align="center"),
+            ft.Text(f"Función: f(x) = {funcion}", size=18, text_align="center"),
+            ft.Text(f"Límite inferior: {lim_inf}", size=16, text_align="center"),
+            ft.Text(f"Límite superior: {lim_sup}", size=16, text_align="center"),
             ft.Divider(),
         ]
         
         if error:
-            contenido.append(ft.Text(error, size=16, color="red", text_align=ft.TextAlign.CENTER))
+            contenido.append(ft.Text(error, size=16, color="red", text_align="center"))
         else:
+            # Generar gráfica
+            grafica = crear_grafica(funcion, lim_inf, lim_sup, resultado)
+            
             contenido.extend([
-                ft.Text("Proceso de integración:", size=20, weight="bold", text_align=ft.TextAlign.CENTER),
-                ft.Text(f"1. Planteamiento:", size=16, weight="bold", text_align=ft.TextAlign.CENTER),
-                ft.Text(f"   ∫ ({funcion}) dx desde {lim_inf} hasta {lim_sup}", size=14, text_align=ft.TextAlign.CENTER),
-                ft.Text(f"2. Antiderivada:", size=16, weight="bold", text_align=ft.TextAlign.CENTER),
-                ft.Text(f"   F(x) = {antiderivada}", size=14, text_align=ft.TextAlign.CENTER),
-                ft.Text(f"3. Evaluación en límite superior ({lim_sup}):", size=16, weight="bold", text_align=ft.TextAlign.CENTER),
-                ft.Text(f"   F({lim_sup}) = {val_sup}", size=14, text_align=ft.TextAlign.CENTER),
-                ft.Text(f"4. Evaluación en límite inferior ({lim_inf}):", size=16, weight="bold", text_align=ft.TextAlign.CENTER),
-                ft.Text(f"   F({lim_inf}) = {val_inf}", size=14, text_align=ft.TextAlign.CENTER),
-                ft.Text(f"5. Resultado (Teorema Fundamental):", size=16, weight="bold", text_align=ft.TextAlign.CENTER),
-                ft.Text(f"   {val_sup} - {val_inf} = {resultado}", size=14, text_align=ft.TextAlign.CENTER),
+                ft.Text("Resultado de la integral definida:", size=20, weight="bold", text_align="center"),
+                ft.Text(f"∫ f(x) dx desde {lim_inf} hasta {lim_sup} = {resultado:.6f} unidades cuadradas", 
+                       size=18, weight="bold", color="green", text_align="center"),
                 ft.Divider(),
-                ft.Text(f"Área bajo la curva: {resultado} unidades cuadradas", size=18, weight="bold", color="green", text_align=ft.TextAlign.CENTER),
+                ft.Text("Representación gráfica:", size=20, weight="bold", text_align="center"),
+                grafica,
+                ft.Divider(),
+                ft.Text("Nota: La gráfica muestra el área sombreada que representa el valor de la integral.", 
+                       size=14, italic=True, text_align="center"),
             ])
         
         contenido.append(
-            ft.ElevatedButton(
-                "Volver al menú",
-                on_click=lambda e: menu_principal(),
-                width=200,
+            ft.Row(
+                [
+                    ft.ElevatedButton(
+                        "Calcular otra",
+                        on_click=mostrar_formulario_matematicas,
+                        width=150,
+                    ),
+                    ft.ElevatedButton(
+                        "Volver al menú",
+                        on_click=lambda e: menu_principal(),
+                        width=150,
+                    ),
+                ],
+                alignment="center",
+                spacing=20
             )
         )
         
-        page.add(ft.Column(contenido, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=15))
+        page.add(ft.Column(contenido, alignment="center", horizontal_alignment="center", spacing=15, scroll="auto"))
 
     def menu_principal():
         page.clean()
@@ -613,24 +715,19 @@ def main(page: ft.Page):
         page.add(
             ft.Column(
                 [
-                    ft.Image(
-                        src="images.jpg",
-                        width=150,
-                        height=150,
-                        fit="contain",
-                    ),
+                    ft.Text("🏫", size=150, text_align="center"),
                     
                     ft.Text(
                         "Bienvenido al Sistema Escolar",
                         size=30,
                         weight="bold",
-                        text_align=ft.TextAlign.CENTER
+                        text_align="center"
                     ),
 
                     ft.Text(
                         "Seleccione una asignatura",
                         size=20,
-                        text_align=ft.TextAlign.CENTER
+                        text_align="center"
                     ),
 
                     ft.Row(
@@ -653,13 +750,13 @@ def main(page: ft.Page):
                                 width=250,
                             ),
                         ],
-                        alignment=ft.MainAxisAlignment.CENTER,
+                        alignment="center",
                         spacing=20,
                         wrap=True
                     ),
                 ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment="center",
+                horizontal_alignment="center",
                 spacing=20
             )
         )
